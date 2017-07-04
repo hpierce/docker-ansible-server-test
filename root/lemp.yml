@@ -1,0 +1,8 @@
+---
+- hosts: all
+  become: yes
+  roles:
+  - hpierce.lemp-ubuntu
+  vars:
+    mysql_root_password: p@ssw0rd
+

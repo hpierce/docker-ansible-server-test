@@ -1,0 +1,28 @@
+---
+- name: restart nginx
+  service: name=nginx state=restarted
+
+- name: validate nginx configuration
+  command: nginx -t -c /etc/nginx/nginx.conf
+  changed_when: False
+
+- name: reload nginx
+  service: name=nginx state=reloaded
+
+- name: restart mysql
+  service: "name={{ mysql_daemon }} state=restarted sleep=5"
+
+- name: restart webserver
+  service:
+    name: "{{ php_webserver_daemon }}"
+    state: restarted
+  notify: restart php-fpm
+  when: php_enable_webserver
+
+- name: restart php-fpm
+  service:
+    name: "{{ php_fpm_daemon }}"
+    state: restarted
+  when: php_enable_php_fpm
+
+

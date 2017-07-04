@@ -1,0 +1,106 @@
+---
+# tasks file for hpierce.lemp-ubuntu
+
+# PACKAGES
+- name: install nginx
+  apt:
+    name: nginx
+    state: present
+
+- name: install php
+  apt:
+    name: php7.0-fpm,php7.0-mysql
+    state: present
+
+- name: install mysql
+  apt:
+    name: mysql-server,python-mysqldb
+    state: present
+
+# STARTUP MYSQL
+- name: Start the MySQL service
+  action: service name=mysql state=started
+
+# COPY FILES
+- name: copy default nginx file
+  copy: src=files/site-default dest=/etc/nginx/sites-enabled/default 
+
+- name: copy application file
+  copy: src=files/index.php dest=/var/www/html/index.php
+
+- name: copy test script
+  copy: src=tests/check_db.sh dest=/root/check_db.sh mode=0755
+
+# SEE IF /root/.my.cnf exists
+- stat:
+    path: /root/.my.cnf
+  register: mycnf
+
+# IF /root/.my.cnf doesn't exist
+- name: create root password
+  mysql_user: name=root host=localhost password={{ mysql_root_password }} priv=*.*:ALL,GRANT
+  when: mycnf.stat.exists == False
+
+- name: copy my.cnf file with root password credentials
+  template: src=templates/root/my.cnf.j2 dest=/root/.my.cnf owner=root mode=0600
+  when: mycnf.stat.exists == False
+
+# COPY TEMPLATES
+- name: copy db.php file with root password credentials
+  template: src=templates/html/db.php.j2 dest=/var/www/html/db.php
+
+# FIX MYSQL
+- name: delete anonymous MySQL server user
+  action: mysql_user user="" state="absent"
+
+- name: remove the MySQL test database
+  action: mysql_db db=test state=absent
+
+# CHOWN
+- name: chown /var/www
+  file:
+    path: /var/www 
+    owner: www-data
+    recurse: yes
+
+- name: chown /var/log/nginx
+  file:
+    path: /var/log/nginx 
+    owner: www-data 
+    recurse: yes
+
+# GIT
+- git:
+    repo: https://github.com/hpierce/test_db.git
+    dest: /var/www/test_db
+    accept_hostkey: yes
+
+- name: create big.sql file
+  shell: cat /var/www/test_db/employees.sql /var/www/test_db/0* > /var/www/test_db/big.sql
+
+# IMPORT DB
+- name: import employees database
+  mysql_db:
+    state: import
+    name: all
+    target: /var/www/test_db/big.sql
+
+# TEST DB
+
+- name: test db
+  command: /root/check_db.sh
+  register: result
+  ignore_errors: True
+
+- debug: msg="{{result.stdout}}"
+
+# LAST SERVICES
+- service:
+    name: php7.0-fpm
+    state: started
+
+- service:
+    name: nginx
+    state: started
+
+
